@@ -14,7 +14,6 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4.1.4", features = ["derive"] }
 console = { version = "0.15.5", features = ["windows-console-colors"]}
-dialoguer = { version = "0.10.3", features = ["fuzzy-select", "completion"] }
 fuzzy-matcher = "0.3.7"
 lazy_static = "1.4.0"
 
