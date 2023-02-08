@@ -4,35 +4,7 @@ use console::{Key, Term};
 use fuzzy_matcher::FuzzyMatcher;
 use std::{io, ops::Rem};
 
-/// Renders a selection menu that user can fuzzy match to reduce set.
-///
-/// User can use fuzzy search to limit selectable items.
-/// Interaction returns index of an item selected in the order they appear in `item` invocation or `items` slice.
-///
-/// ## Examples
-///
-/// ```rust,no_run
-/// use crate::internal::select::{
-///     select::FuzzySelect,
-///     theme::ColorfulTheme
-/// };
-/// use console::Term;
-///
-/// fn main() -> std::io::Result<()> {
-///     let items = vec!["Item 1", "item 2"];
-///     let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-///         .items(&items)
-///         .default(0)
-///         .interact()?;
-///
-///     match selection {
-///         Some(index) => println!("User selected item : {}", items[index]),
-///         None => println!("User did not select anything")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
+use ranobe::providers::Ranobe;
 
 enum InputMode {
 	Normal,
@@ -41,7 +13,7 @@ enum InputMode {
 
 pub struct FuzzySelect<'a> {
 	default: Option<usize>,
-	items: Vec<String>,
+	items: Vec<Ranobe>,
 	prompt: String,
 	report: bool,
 	clear: bool,
@@ -83,15 +55,15 @@ impl FuzzySelect<'_> {
 	}
 
 	/// Add a single item to the fuzzy selector.
-	pub fn item<T: ToString>(&mut self, item: T) -> &mut Self {
-		self.items.push(item.to_string());
+	pub fn item(&mut self, item: Ranobe) -> &mut Self {
+		self.items.push(item);
 		self
 	}
 
 	/// Adds multiple items to the fuzzy selector.
-	pub fn items<T: ToString>(&mut self, items: &[T]) -> &mut Self {
+	pub fn items(&mut self, items: &[Ranobe]) -> &mut Self {
 		for item in items {
-			self.items.push(item.to_string());
+			self.items.push(item.clone());
 		}
 		self
 	}
@@ -173,8 +145,8 @@ impl FuzzySelect<'_> {
 		let mut sel = self.default;
 
 		let mut size_vec = Vec::new();
-		for items in self.items.iter().as_slice() {
-			let size = &items.len();
+		for item in self.items.iter().as_slice() {
+			let size = &item.title.len();
 			size_vec.push(*size);
 		}
 
@@ -220,7 +192,7 @@ impl FuzzySelect<'_> {
 			let mut filtered_list = self
 				.items
 				.iter()
-				.map(|item| (item, matcher.fuzzy_match(item, &search_term)))
+				.map(|item| (item, matcher.fuzzy_match(&item.title, &search_term)))
 				.filter_map(|(item, score)| score.map(|s| (item, s)))
 				.collect::<Vec<_>>();
 
@@ -234,13 +206,14 @@ impl FuzzySelect<'_> {
 				.take(paging.capacity)
 			{
 				render.fuzzy_select_prompt_item(
-					item,
+					&item.title,
 					Some(idx) == sel,
 					self.highlight_matches,
 					&matcher,
 					&search_term,
 				)?;
 			}
+
 			term.flush()?;
 
 			match (term.read_key()?, sel) {
@@ -304,13 +277,13 @@ impl FuzzySelect<'_> {
 						if self.report {
 							render.input_prompt_selection(
 								self.prompt.as_str(),
-								filtered_list[sel].0,
+								filtered_list[sel].0.title.as_str(),
 							)?;
 						}
 
-						let sel_string = filtered_list[sel].0;
+						let sel_string = &filtered_list[sel].0.title;
 						let sel_string_pos_in_items =
-							self.items.iter().position(|item| item.eq(sel_string));
+							self.items.iter().position(|item| item.title.eq(sel_string));
 
 						term.show_cursor()?;
 						return Ok(sel_string_pos_in_items);
@@ -334,6 +307,11 @@ impl FuzzySelect<'_> {
 				}
 
 				_ => {}
+			}
+
+			match sel {
+				Some(sel) => paging.update(sel)?,
+				None => paging.update(0)?,
 			}
 
 			render.clear_preserve_prompt(&size_vec)?;

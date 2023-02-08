@@ -1,18 +1,28 @@
 mod internal;
 
+use std::env;
+
+use ranobe::{
+	http::{client_init, fetch_url, CLIENT},
+	providers::readlightnovel::ReadLightNovel,
+	providers::RanobeScraper,
+	utils::open_glow,
+};
+
 use crate::internal::select::{select::FuzzySelect, theme::ColorfulTheme};
-// use dialoguer::{console::Term, theme::ColorfulTheme, FuzzySelect};
+use surf::{client, Url};
 
 use clap::{Parser, Subcommand};
-use std::thread;
 
 #[derive(Subcommand, Debug)]
 enum RanobeMode {
-	#[command(about = "Read Light Novel with glow.")]
+	#[command(about = "Search and Read Light Novel with glow.")]
 	Read,
-	#[command(about = "Download Light Novel.")]
+	#[command(about = "Get latest update list and Read Light Novel with glow.")]
+	Latest,
+	#[command(about = "Search and Download Light Novel.")]
 	Download,
-	#[command(about = "Stash Light Novel with glow.")]
+	#[command(about = "Seach and Stash Light Novel with glow.")]
 	Stash,
 }
 
@@ -27,11 +37,16 @@ struct Args {
 	provider: String,
 
 	/// Size of the list. Please only send in positive number.
+	#[arg(short, long, default_value_t = 80)]
+	wrap: u16,
+
+	/// Size of the list. Please only send in positive number.
 	#[arg(short, long, default_value_t = 20)]
 	size: usize,
 }
 
-fn main() -> std::io::Result<()> {
+#[async_std::main]
+async fn main() -> Result<(), surf::Error> {
 	let args = Args::parse();
 
 	let mode = match &args.mode {
@@ -41,28 +56,38 @@ fn main() -> std::io::Result<()> {
 
 	let _ = match mode {
 		&RanobeMode::Read => {}
+		&RanobeMode::Latest => {}
 		&RanobeMode::Stash => {}
 		&RanobeMode::Download => {}
 	};
 
-	let selections = vec![
-		"Ice Cream",
-		"Vanilla Cupcake",
-		"Chocolate Muffin",
-		"A Pile of sweet, sweet mustard",
-	];
+	// let selections = vec![
+	// 	"Ice Cream",
+	// 	"Vanilla Cupcake",
+	// 	"Chocolate Muffin",
+	// 	"A Pile of sweet, sweet mustard",
+	// ];
+	//
+
+	let provider = ReadLightNovel::new()?;
+
+	let body = provider.get_latest().await?;
+
+	// println!("{:?}", body);
 
 	let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-		.with_prompt("Pick your flavor")
+		.with_prompt("Choose chapter of light novel to read:")
 		.max_length(args.size)
 		.default(0)
-		.items(&selections[..])
+		.items(&body[..])
 		.interact()?;
 
-	match selection {
-		Some(i) => println!("Enjoy your {}!", selections[i]),
-		None => println!("You didnt select anything"),
-	}
+	let text = match selection {
+		Some(i) => provider.get_text(body[i].url.clone()).await?,
+		None => "".to_string(),
+	};
+
+	open_glow(text, args.wrap)?;
 
 	Ok(())
 }
